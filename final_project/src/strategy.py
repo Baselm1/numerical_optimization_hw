@@ -3,7 +3,22 @@
 ##########################################
 
 '''
-Description:
-    In this file, we define the strategy and test it on the data to get the risk of trading the strategy for every pair before optimization.
-    [Add more info as we go]
+Ichimoku Cloud + ATR:
+    For this strategy, we're going to define a few simple rules.
+    First, note that Ickimoku cloud has 5 returns, 4 of which we care about: 
+
 '''
+
+class Strategy:
+
+    def __init__():
+        pass
+
+    def generate_signals():
+        pass
+
+    def backtest():
+        pass
+
+    def return_stats():
+        pass

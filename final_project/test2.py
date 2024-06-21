@@ -15,16 +15,16 @@ def backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_len
     # Convert 'open_time' to datetime assuming it's in milliseconds
     df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
 
-    # # Resample to 15-minute intervals (adjust if needed)
-    # df_resampled = df.resample('1min', on='open_time').agg({
-    #     'open': 'first',
-    #     'high': 'max',
-    #     'low': 'min',
-    #     'close': 'last'
-    # })
+    # Resample to 15-minute intervals (adjust if needed)
+    df_resampled = df.resample('1min', on='open_time').agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last'
+    })
 
-    # # Ensure all columns are properly aggregated
-    # df = df_resampled.reset_index()
+    # Ensure all columns are properly aggregated
+    df = df_resampled.reset_index()
 
     # Ensure the column names are in lower case to match your data labels
     df.columns = ['open_time', 'open', 'high', 'low', 'close']
@@ -81,19 +81,19 @@ def backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_len
 
     # Calculate portfolio statistics
     stats = portfolio.stats()
+    portfolio.plot().show()
 
     return stats
 
 def optimize_strategy_worker(params):
     data, tenkan_sen_length, kijun_sen_length, senkou_span_length = params
-    print()
     return (tenkan_sen_length, kijun_sen_length, senkou_span_length), backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_length)
 
 def optimize_strategy(data):
     parameter_grid = {
         'tenkan_sen_length': range(5, 51, 3),    # Adjust range and step size as needed
-        'kijun_sen_length': range(15, 46, 3),
-        'senkou_span_length': range(25, 56, 3)
+        'kijun_sen_length': range(20, 61, 3),
+        'senkou_span_length': range(30, 91, 3)
     }
 
     results = {}
@@ -165,7 +165,7 @@ def plot_surface_with_contours(results, metric='Sharpe Ratio'):
         if metric == 'Sharpe Ratio':
             metric_value = stats['Sharpe Ratio']
         elif metric == 'Total Return':
-            metric_value = stats.get('Win Rate [%]')  # Use get() to handle missing keys gracefully
+            metric_value = stats.get('Total Return [%]')  # Use get() to handle missing keys gracefully
         else:
             metric_value = None  # Handle additional metrics if needed
         metric_values.append(metric_value)
@@ -234,25 +234,11 @@ def concat_parquet_files(file_paths):
     return concatenated_df
 
 if __name__ == "__main__":
+    # Testing the best parameters but for the entire dataset:
     print("Reading data...")
     paths = [os.path.join('data/ETHUSDT', file) for file in os.listdir('data/ETHUSDT') if file.endswith('.parquet')]
     data = concat_parquet_files(paths)
-
-    print('Optimizing strategy...')
-    start = time.time()
-    results = optimize_strategy(data.tail(int(len(data)/20)))
-    print('Done optimization')
-
-    best_params, best_stats = max(results.items(), key=lambda x: x[1]['Win Rate [%]'])
-
-    print('\n')
-    print("---------------------")
-    print("Best Parameters:", best_params)
-    print("Best Stats:")
-    print(best_stats)
-
-    print(f'Total time taken: {time.time() - start} seconds')
-    print('\n')
-    print("---------------------")
-    plot_surface_with_contours(results, metric='Total Return')
+    print("Backtesting...")
+    stats = backtest_strategy(data, tenkan_sen_length=9, kijun_sen_length=26, senkou_span_length=52)
+    print(stats)
 

@@ -15,85 +15,89 @@ def backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_len
     # Convert 'open_time' to datetime assuming it's in milliseconds
     df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
 
-    # # Resample to 15-minute intervals (adjust if needed)
-    # df_resampled = df.resample('1min', on='open_time').agg({
-    #     'open': 'first',
-    #     'high': 'max',
-    #     'low': 'min',
-    #     'close': 'last'
-    # })
+    # Resample to 1-minute intervals (adjust if needed)
+    df_resampled = df.resample('15min', on='open_time').agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last'
+    })
 
-    # # Ensure all columns are properly aggregated
-    # df = df_resampled.reset_index()
+    # Ensure all columns are properly aggregated
+    df = df_resampled.reset_index()
 
     # Ensure the column names are in lower case to match your data labels
     df.columns = ['open_time', 'open', 'high', 'low', 'close']
 
     # Step 2: Calculate Ichimoku Cloud components
-    # Calculate Ichimoku Cloud components with specified parameters
     ichimoku_cloud, _ = ta.ichimoku(high=df['high'], low=df['low'], close=df['close'],
                                     tenkan=tenkan_sen_length, kijun=kijun_sen_length, senkou=senkou_span_length,
                                     include_chikou=False)
 
-    # Extract individual components
     tenkan_sen = ichimoku_cloud[f'ITS_{tenkan_sen_length}']
     kijun_sen = ichimoku_cloud[f'IKS_{kijun_sen_length}']
-    span_a = ichimoku_cloud[f'ISA_{tenkan_sen_length}']  # Adjust for span A
+    span_a = ichimoku_cloud[f'ISA_{tenkan_sen_length}']
     span_b = ichimoku_cloud[f'ISB_{kijun_sen_length}']
 
-    # Step 3: Define Strategy Logic
-    # Create signals DataFrame
-    signals = pd.DataFrame(index=df.index)
+    # Step 3: Calculate EMA and SMA
+    ema = ta.ema(df['close'], length=50)
+    sma = ta.sma(df['close'], length=100)
 
-    # Define Strategy Logic based on extracted components
-    # Long when tenkan_sen crosses over kijun_sen, close is above both span A and span B
-    long_entries = crossed_over(tenkan_sen, kijun_sen) & (df['close'] > span_a) & (df['close'] > span_b)
+    # Calculate ATR for stop loss, take profit, and trailing stop
+    atr = ta.atr(df['high'], df['low'], df['close'], length=14)
 
-    # Short when tenkan_sen crosses below kijun_sen, close is below both span A and span B
-    short_entries = crossed_below(tenkan_sen, kijun_sen) & (df['close'] < span_a) & (df['close'] < span_b)
+    long_entries = (crossed_over(tenkan_sen, kijun_sen) & 
+                    (df['close'] > span_a) & 
+                    (df['close'] > span_b) &
+                    (df['close'] > ema) & 
+                    (df['close'] > sma))
 
-    # Exit conditions for long positions: tenkan_sen < kijun_sen
+    # Step 5: Backtest the Strategy with vectorbt
+    stop_loss = atr * 2  # Example: Stop loss at 2 times the ATR value
+    take_profit = atr * 4  # Example: Take profit at 4 times the ATR value
+    trailing_stop = atr * 1.5  # Example: Trailing stop at 1.5 times the ATR value
+
     long_exits = crossed_below(tenkan_sen, kijun_sen)
 
-    # Exit conditions for short positions: tenkan_sen > kijun_sen
-    short_exits = crossed_over(tenkan_sen, kijun_sen)
-
-    # Assign strategy signals to the signals DataFrame
-    signals['long'] = long_entries.astype(int)
-    signals['short'] = short_entries.astype(int)
-    signals['long_exit'] = long_exits.astype(int)
-    signals['short_exit'] = short_exits.astype(int)
-
-    # Step 4: Backtest the Strategy with vectorbt
-    # Create portfolio
     print(f'Params: {tenkan_sen_length}, {kijun_sen_length}, {senkou_span_length}')
     portfolio = vbt.Portfolio.from_signals(
         close=df['close'],
         high=df['high'],
         low=df['low'],
-        entries=signals['long'],
-        exits=signals['long_exit'],
-        short_entries=signals['short'],
-        short_exits=signals['short_exit'],
-        freq='1m',  # Frequency for closing positions (adjust as needed)
-        fees=0.001
+        entries=long_entries,
+        exits=long_exits,
+        freq='15min',
+        fees=0.001,
+        sl_stop=stop_loss,  # Stop loss
+        tp_stop=take_profit,  # Take profit
+        sl_trail=trailing_stop,  # Trailing stop
+        use_stops=True,
+        init_cash=10000,
+        size=1
     )
 
-    # Calculate portfolio statistics
     stats = portfolio.stats()
+    portfolio.plot().show()
 
     return stats
 
+def crossed_over(series1, series2):
+    return (series1.shift(1) < series2.shift(1)) & (series1 > series2)
+
+def crossed_below(series1, series2):
+    return (series1.shift(1) > series2.shift(1)) & (series1 < series2)
+
+
+
 def optimize_strategy_worker(params):
     data, tenkan_sen_length, kijun_sen_length, senkou_span_length = params
-    print()
     return (tenkan_sen_length, kijun_sen_length, senkou_span_length), backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_length)
 
 def optimize_strategy(data):
     parameter_grid = {
         'tenkan_sen_length': range(5, 51, 3),    # Adjust range and step size as needed
-        'kijun_sen_length': range(15, 46, 3),
-        'senkou_span_length': range(25, 56, 3)
+        'kijun_sen_length': range(20, 61, 3),
+        'senkou_span_length': range(30, 91, 3)
     }
 
     results = {}
@@ -165,7 +169,7 @@ def plot_surface_with_contours(results, metric='Sharpe Ratio'):
         if metric == 'Sharpe Ratio':
             metric_value = stats['Sharpe Ratio']
         elif metric == 'Total Return':
-            metric_value = stats.get('Win Rate [%]')  # Use get() to handle missing keys gracefully
+            metric_value = stats.get('Total Return [%]')  # Use get() to handle missing keys gracefully
         else:
             metric_value = None  # Handle additional metrics if needed
         metric_values.append(metric_value)
@@ -234,25 +238,13 @@ def concat_parquet_files(file_paths):
     return concatenated_df
 
 if __name__ == "__main__":
+    # Testing the best parameters but for the entire dataset:
+    path = 'data/BTCUSDT'
     print("Reading data...")
-    paths = [os.path.join('data/ETHUSDT', file) for file in os.listdir('data/ETHUSDT') if file.endswith('.parquet')]
+    paths = [os.path.join(path, file) for file in os.listdir(path) if file.endswith('.parquet')]
     data = concat_parquet_files(paths)
+    print("Backtesting...")
+    stats = backtest_strategy(data, tenkan_sen_length=9, kijun_sen_length=26, senkou_span_length=52)
+    print(stats)
 
-    print('Optimizing strategy...')
-    start = time.time()
-    results = optimize_strategy(data.tail(int(len(data)/20)))
-    print('Done optimization')
-
-    best_params, best_stats = max(results.items(), key=lambda x: x[1]['Win Rate [%]'])
-
-    print('\n')
-    print("---------------------")
-    print("Best Parameters:", best_params)
-    print("Best Stats:")
-    print(best_stats)
-
-    print(f'Total time taken: {time.time() - start} seconds')
-    print('\n')
-    print("---------------------")
-    plot_surface_with_contours(results, metric='Total Return')
-
+# .head(100000).tail(50000)
