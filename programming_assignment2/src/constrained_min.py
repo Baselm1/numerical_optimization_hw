@@ -10,7 +10,7 @@ import numpy as np
 
 class InternalPointOptimzer:
 
-    def __init__(self, objective_function: callable, ineq_constraints: list, A: np.ndarray, b: np.ndarray, x0: np.ndarray, grad_epsilon=1e-10, c1=1e-6, c2=0.1, rho=0.71, t=1, mu=10, max_iter=1000, ineq_tol=1e-9) -> None:
+    def __init__(self, objective_function: callable, ineq_constraints: list, A: np.ndarray, b: np.ndarray, x0: np.ndarray, c1=1e-6, c2=0.1, rho=0.71, t=1, mu=10, max_iter=1000, ineq_tol=1e-9) -> None:
         '''
             Constructor method of the class.
             I provided additional params that can be changed for different optimization behavior.
@@ -26,7 +26,6 @@ class InternalPointOptimzer:
         self.A = A
         self.b = b
         self.x0 = x0
-        self.grad_epsilon = grad_epsilon
         self.c1 = c1
         self.c2 = c2
         self.rho = rho
@@ -267,7 +266,8 @@ class InternalPointOptimzer:
         '''
         alpha = 1.0
         objective, gradient, _ = self.f_call(f, x)
-        while True:
+        max_iter = 1000 # For none analytical methods the line search might loop for too long.
+        for _ in range(max_iter):
             new_x = x + alpha * pk
             new_f, new_grad, _ = self.f_call(f, new_x)
 
@@ -276,6 +276,7 @@ class InternalPointOptimzer:
                 return alpha
 
             alpha *= self.rho
+        return alpha
 
     def log_barrier(self) -> callable:
         '''
@@ -308,7 +309,7 @@ class InternalPointOptimzer:
                         objective_i, gradient_i = g(x)
                         objective -= np.log(-objective_i)
                         gradient -= gradient_i / objective_i
-                    return objective, gradient
+                    return objective, gradient, None
                 
         return phi
     
@@ -323,6 +324,7 @@ class InternalPointOptimzer:
         # Set the computation type of the function and get the function we're starting with.
         self.compute = compute
         log_barrier_func = self.log_barrier()
+        self.out_loop = 0 
 
         # Now we loop through the optimization, and in each loop if we don't converge we increase the value of t by a factor of mu.
         while len(self.ineq_constraints)/self.t >= self.ineq_tol:
@@ -336,6 +338,7 @@ class InternalPointOptimzer:
                 return # Exit the optimization
             
             # 3) Otherwise we continue optimizing as usual:
+            self.out_loop += 1 
             self.t *= self.mu
             log_barrier_func = self.log_barrier()
             self.x0 = optimization_path[-1, :]
@@ -343,5 +346,4 @@ class InternalPointOptimzer:
             
         
     #     # ADD PRINT STATEMENTS HERE AS REQUIRED FOR THE REPORT.
-
 
