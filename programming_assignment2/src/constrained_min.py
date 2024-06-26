@@ -7,6 +7,7 @@
 '''
 
 import numpy as np
+import plotly.graph_objects as go
 
 class InternalPointOptimzer:
 
@@ -35,29 +36,11 @@ class InternalPointOptimzer:
         self.ineq_tol = ineq_tol
         self.newton_tol = ineq_tol/10 
         self.path = np.zeros((1, len(x0))) 
-
-    # def gradient(self, f: callable, x: np.ndarray, epsilon: float=1e-12):
-    #     '''
-    #         Gradient is only used if the provided function does not have an already analytically calculated Gradient.
-    #         Note that this is a very simple "limit" evaluation close to the definition in calculus.
-    #         To find the derivative in a computational manner we simply evaluate the limit at a value close to zero.
-
-    #         Params:
-    #             f: The function to find the gradient for.
-    #             x: The point of where we evaluate the gradient.
-    #             epsilon: Used in place of "h" in the limit definition, as we can't divide by 0.
-
-    #         Returns:
-    #             The approximate gradient of the provided function 'f' around the point 'x'.
-    #     '''
+        self.objectives = []
+        # ADDED LATER FOR PLOTTING
+        self.out_loop = 0
+        self.out_loop_path = []
         
-    #     # Implementing the derivative approximation as found in Nocedal, pg.(195), eq.(8.1).
-    #     grad = np.zeros_like(x)
-    #     for i in range(len(x)):
-    #         x_plus = x.copy()
-    #         x_plus[i] += epsilon
-    #         grad[i] = (f(x_plus) - f(x)) / epsilon
-    #     return grad
     
     def gradient(self, f: callable, x: np.ndarray, epsilon: float=1e-12):
         '''
@@ -208,7 +191,7 @@ class InternalPointOptimzer:
 
             # Add the new found x to the path and check for convergence.
             path[iteration + 1, :] = new_x
-            new_f = self.f_call(f, new_x, hessian=False)[0]
+            new_f = self.f_call(self.f, new_x, hessian=False)[0]
 
             # Check convergence and return results if converged.
             newton_decrement = np.sqrt(np.dot(pk, np.dot(current_hessian, pk)))
@@ -344,6 +327,5 @@ class InternalPointOptimzer:
             self.x0 = optimization_path[-1, :]
             self.path = np.append(self.path, optimization_path[1:, :], axis=0)
             
-        
-    #     # ADD PRINT STATEMENTS HERE AS REQUIRED FOR THE REPORT.
-
+    def plot(self) -> None:
+        pass

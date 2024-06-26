@@ -63,12 +63,12 @@ class TestConstrainedMin(unittest.TestCase):
             A = problem_params[3],
             b = problem_params[4],
             # Adjust the following params as needed.
-            c1 = 1e-4, # Wolfe's sufficient condition.
-            c2 = 0.1, # Wolfe's curvature condition.
-            rho = 0.72, # Backtracking constant.
+            c1 = 1e-6, # Wolfe's sufficient condition.
+            c2 = 0.5, # Wolfe's curvature condition.
+            rho = 0.74, # Backtracking constant.
             t = 1, # Log barrier multiplier.
             mu = 10, # Factor of log barrier multiplier.
-            max_iter = 300 # Newtons method max iteration.
+            max_iter = 500 # Newtons method max iteration.
         )
         optimizer.solve(compute=True)
 
@@ -85,10 +85,10 @@ class TestConstrainedMin(unittest.TestCase):
             # Adjust the following params as needed.
             c1 = 1e-4, # Wolfe's sufficient condition.
             c2 = 0.1, # Wolfe's curvature condition.
-            rho = 0.71, # Backtracking constant.
+            rho = 0.45, # Backtracking constant.
             t = 1, # Log barrier multiplier.
             mu = 10, # Factor of log barrier multiplier.
-            max_iter = 300 # Newtons method max iteration.
+            max_iter = 1000 # Newtons method max iteration.
         )
         optimizer.solve(compute=True)
 
