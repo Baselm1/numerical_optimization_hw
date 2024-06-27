@@ -3,7 +3,14 @@
 ################################################
 
 '''
-    ADD NOTES 
+    An Optimizer class that optimizes a provided function in two way: Analytically and Numerically.
+    
+    With Analytical methods, it is assumed the provided function provide the gradient and hessian matrix pre solved and ready to evaluate. This saves a lot on computational resources, converges better, and takes way less steps.
+    
+    On the other hand, with Numerical methods, we only assume that the function is provided, and we approximate both the gradient and the hessian matrix at every step of the loop. This leads to rounding errors being bigger than with the analytical methods, and they build up faster and diverge quicker. However, it provides the "convenience" of just providing the function we want to optimize.
+
+    I AM AWARE that it is not required to do so. 
+
 '''
 
 import numpy as np
@@ -20,7 +27,6 @@ class InternalPointOptimzer:
             - grad_epsilon: The epsilon value for which we calculate the gradient.
             - c1, c2 and rho: The constants for the backtracking line search.
             - t and mu: The starting constants for the log barrier.
-            - ineq_tol: 
         '''
         self.f = objective_function
         self.ineq_constraints = ineq_constraints
@@ -28,7 +34,7 @@ class InternalPointOptimzer:
         self.b = b
         self.x0 = x0
         self.c1 = c1
-        self.c2 = c2
+        self.c2 = c2 # Curvature check was disabled. Uncomment to enable.
         self.rho = rho
         self.t = t
         self.mu = mu
@@ -115,7 +121,7 @@ class InternalPointOptimzer:
         _, _, hessian = f(x, hessian=True)
         return hessian
     
-    def f_call(self, f, x, hessian=False, *args) -> tuple:
+    def f_call(self, f: callable, x: np.ndarray, hessian=False, *args) -> tuple:
         '''
             Since function calls depend on the value of self.compute, this method acts as a wrapper to simplify function calls.
             Assumes this function won't be called at the start of newton method.
@@ -330,15 +336,21 @@ class InternalPointOptimzer:
             log_barrier_func = self.log_barrier()
             self.x0 = optimization_path[-1, :]
             self.path = np.append(self.path, optimization_path[1:, :], axis=0)
+
+    '''
+        NOTE: The plotting functions were easier to incorporate in the class than to return many things and use another function implemented in utils for plotting, so this is why nothing was implemented there.
+        NOTE: The plotting code below was heavily AI assisted (ChatGPT) and this is why I didn't comment it much since some parts I don't fully understand.
+    '''
             
     def plot(self) -> None:
-        # Determine the number of variables (2 or 3)
+        '''
+            Plots the feasible region, the path and the final objective value of the function.
+        '''
         num_vars = len(self.path[0])
     
         if num_vars == 2:
             fig = go.Figure()
     
-            # Define the function surface
             x_vals = np.linspace(-1, 2, 500)
             y_vals = np.linspace(-1, 2, 500)
             X, Y = np.meshgrid(x_vals, y_vals)
@@ -347,13 +359,11 @@ class InternalPointOptimzer:
             last_point_x = self.path[-1, 0]
             last_point_y = self.path[-1, 1]
     
-            # Evaluate function and apply constraints
             for i in range(X.shape[0]):
                 for j in range(X.shape[1]):
                     x = X[i, j]
                     y = Y[i, j]
     
-                    # Check all constraints
                     constraints_passed = True
                     for constraint in self.ineq_constraints:
                         result = constraint([x, y])
@@ -362,24 +372,21 @@ class InternalPointOptimzer:
                         else:
                             value = result
     
-                        if value > 0:  # Constraint not satisfied
+                        if value > 0:  
                             constraints_passed = False
                             break
                         
                     if constraints_passed:
                         Z[i, j] = self.f_call(self.f, [x, y])[0]
                     else:
-                        Z[i, j] = np.nan  # Mask out values outside constraints
+                        Z[i, j] = np.nan  
     
-            # Plot the function surface
             fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', showscale=False, opacity=0.7))
     
-            # Plot the path
             path_z = [self.f_call(self.f, point)[0] for point in self.path]
             fig.add_trace(go.Scatter3d(x=self.path[:, 0], y=self.path[:, 1], z=path_z,
                                        mode='lines+markers', line=dict(color='cyan', width=3), marker=dict(size=5, color='cyan', symbol='circle')))
     
-            # Add a red marker for the last point
             fig.add_trace(go.Scatter3d(
                 x=[self.path[-1, 0]],
                 y=[self.path[-1, 1]],
@@ -390,34 +397,28 @@ class InternalPointOptimzer:
                 textposition='bottom right',
             ))
     
-            # Update layout for dark mode using plotly's predefined dark template
             fig.update_layout(
                 template='plotly_dark',
                 scene=dict(
                     xaxis_title='x',
                     yaxis_title='y',
                     zaxis_title='f(x,y)',
-                    # No range specified for x-axis, y-axis, or z-axis
                 ),
             )
     
-            # Show plot
             fig.show()
     
         elif num_vars == 3:
-            # Create grid points for the plane
             x = np.linspace(0, 1, 50)
             y = np.linspace(0, 1, 50)
             x, y = np.meshgrid(x, y)
             z = 1 - x - y
     
-            # Apply non-negativity constraint
             mask = z >= 0
             x = x[mask]
             y = y[mask]
             z = z[mask]
     
-            # Create the 3D plane plot
             fig = go.Figure(data=[go.Mesh3d(
                 x=x.flatten(),
                 y=y.flatten(),
@@ -428,7 +429,6 @@ class InternalPointOptimzer:
                 opacity=0.7
             )])
     
-            # Add trace for the 3D path connecting the points
             fig.add_trace(go.Scatter3d(
                 x=self.path[:, 0],
                 y=self.path[:, 1],
@@ -438,7 +438,6 @@ class InternalPointOptimzer:
                 marker=dict(size=5, color='cyan', symbol='circle')
             ))
     
-            # Add a red marker for the last point
             last_point_x = self.path[-1, 0]
             last_point_y = self.path[-1, 1]
             last_point_z = self.path[-1, 2]
@@ -454,7 +453,6 @@ class InternalPointOptimzer:
                 showlegend=False
             ))
     
-            # Update layout for dark mode using plotly's predefined dark template
             fig.update_layout(
                 template='plotly_dark',
                 scene=dict(
@@ -464,173 +462,19 @@ class InternalPointOptimzer:
                     zaxis=dict(range=[-0.1, 1]),
                 ),
             )
-    
-            # Show plot
             fig.show()
 
     def plot_line(self) -> None:
-        # Extract x and y coordinates from self.out_loop_path
+        '''
+            Plots the out iterations number vs the objective of the function.
+        '''
         x_coords, y_coords = zip(*self.out_loop_path)
-
-        # Create a scatter plot (mode='lines+markers' for both line and markers)
         fig = go.Figure(data=go.Scatter(x=x_coords, y=y_coords, mode='lines+markers', marker=dict(size=10)))
-
-        # Customize layout
         fig.update_layout(title='Line Plot of Points',
                           xaxis_title='X Axis',
                           yaxis_title='Y Axis',
                           hovermode='closest',
                           template='plotly_dark'  )
 
-        # Display the plot
         fig.show()
 
-
-
-    # def plot(self) -> None:
-    #     # Determine the number of variables (2 or 3)
-    #     num_vars = len(self.path[0])
-        
-    #     if num_vars == 2:
-    #         fig = go.Figure()
-
-    #         # Define the function surface
-    #         x_vals = np.linspace(-1, 2, 500)
-    #         y_vals = np.linspace(-1, 2, 500)
-    #         X, Y = np.meshgrid(x_vals, y_vals)
-    #         Z = np.zeros_like(X)
-
-    #         # Evaluate function and apply constraints
-    #         for i in range(X.shape[0]):
-    #             for j in range(X.shape[1]):
-    #                 x = X[i, j]
-    #                 y = Y[i, j]
-
-    #                 # Check all constraints
-    #                 constraints_passed = True
-    #                 for constraint in self.ineq_constraints:
-    #                     result = constraint([x, y])
-    #                     if isinstance(result, tuple):
-    #                         value = result[0]
-    #                     else:
-    #                         value = result
-
-    #                     if value > 0:  # Constraint not satisfied
-    #                         constraints_passed = False
-    #                         break
-                        
-    #                 if constraints_passed:
-    #                     Z[i, j] = self.f_call(self.f, [x, y])[0]
-    #                 else:
-    #                     Z[i, j] = np.nan  # Mask out values outside constraints
-
-    #         # Plot the function surface
-    #         fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Viridis', showscale=False, opacity=0.5))
-
-    #         path_z = [self.f_call(self.f, point)[0] for point in self.path]
-    #         fig.add_trace(go.Scatter3d(x=self.path[:, 0], y=self.path[:, 1], z=path_z,
-    #                                    mode='lines+markers', line=dict(color='cyan', width=3)))
-
-    #         # Add a red marker for the last point
-    #         fig.add_trace(go.Scatter3d(
-    #             x=[self.path[-1, 0]],
-    #             y=[self.path[-1, 1]],
-    #             z=[path_z[-1]],
-    #             mode='markers',
-    #             marker=dict(size=8, color='red', symbol='diamond'),
-    #         ))
-
-    #         # Update layout for dark mode using plotly's predefined dark template
-    #         fig.update_layout(
-    #             template='plotly_dark',
-    #             scene=dict(
-    #                 xaxis_title='x',
-    #                 yaxis_title='y',
-    #                 zaxis_title='f(x,y)',
-    #                 # No range specified for x-axis, y-axis, or z-axis
-    #             ),
-    #         )       
-
-    #         # Show plot
-    #         fig.show()
-
-
-    #     elif num_vars == 3:
-    #         # Create grid points for the plane
-    #         x = np.linspace(0, 1, 50)
-    #         y = np.linspace(0, 1, 50)
-    #         x, y = np.meshgrid(x, y)
-    #         z = 1 - x - y
-
-    #         # Apply non-negativity constraint
-    #         mask = z >= 0
-    #         x = x[mask]
-    #         y = y[mask]
-    #         z = z[mask]
-
-    #         # Create the 3D plane plot
-    #         fig = go.Figure(data=[go.Mesh3d(
-    #             x=x.flatten(),
-    #             y=y.flatten(),
-    #             z=z.flatten(),
-    #             intensity=x.flatten()**2 + y.flatten()**2 + (z.flatten() + 1)**2,
-    #             colorscale='Viridis',
-    #             colorbar=dict(title='f(x,y,z)'),
-    #             opacity=0.5
-    #         )])
-
-    #         # Add trace for the 3D path connecting the points
-    #         fig.add_trace(go.Scatter3d(
-    #             x=self.path[:, 0],
-    #             y=self.path[:, 1],
-    #             z=self.path[:, 2],
-    #             mode='lines+markers',
-    #             line=dict(color='cyan', width=3),
-    #             marker=dict(size=5, color='cyan', symbol='circle')
-    #         ))
-
-    #         # Add a red marker for the last point
-    #         last_point_x = self.path[-1, 0]
-    #         last_point_y = self.path[-1, 1]
-    #         last_point_z = path_z[-1]
-
-    #         fig.add_trace(go.Scatter3d(
-    #             x=[last_point_x],
-    #             y=[last_point_y],
-    #             z=[last_point_z],
-    #             mode='markers+text',
-    #             marker=dict(size=12, color='red', symbol='diamond', opacity=1),
-    #             text=[f'({last_point_x}, {last_point_y}, {last_point_z})'],
-    #             textposition='top center',
-    #             showlegend=False
-    #         ))
-
-    #         # Add an annotation to show the coordinates
-    #         fig.add_annotation(
-    #             dict(
-    #                 x=last_point_x,
-    #                 y=last_point_y,
-    #                 z=last_point_z,
-    #                 text=f'({last_point_x:.2f}, {last_point_y:.2f}, {last_point_z:.2f})',
-    #                 showarrow=True,
-    #                 arrowhead=1,
-    #                 ax=0,
-    #                 ay=-1,
-    #                 font=dict(color='red', size=12),
-    #                 bgcolor='rgba(255, 255, 255, 0.8)',
-    #                 opacity=0.7
-    #             )
-    #         )
-
-    #         # Update layout for dark mode using plotly's predefined dark template
-    #         fig.update_layout(
-    #             template='plotly_dark',
-    #             scene=dict(
-    #                 xaxis_title='x',
-    #                 yaxis_title='y',
-    #                 zaxis_title='z',
-    #             ),
-    #         )
-
-    #         # Show plot
-    #         fig.show()
