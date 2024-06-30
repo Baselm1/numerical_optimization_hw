@@ -8,14 +8,19 @@ import multiprocessing
 import plotly.graph_objects as go
 import numpy as np
 
+import pandas as pd
+import pandas_ta as ta
+import vectorbt as vbt
+import os
+import multiprocessing
+import plotly.graph_objects as go
+import numpy as np
+
 def backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_length):
-    # Step 1: Read the Parquet file
     df = data.copy()
 
-    # Convert 'open_time' to datetime assuming it's in milliseconds
     df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
 
-    # Resample to 1-minute intervals (adjust if needed)
     df_resampled = df.resample('15min', on='open_time').agg({
         'open': 'first',
         'high': 'max',
@@ -23,71 +28,38 @@ def backtest_strategy(data, tenkan_sen_length, kijun_sen_length, senkou_span_len
         'close': 'last'
     })
 
-    # Ensure all columns are properly aggregated
     df = df_resampled.reset_index()
-
-    # Ensure the column names are in lower case to match your data labels
     df.columns = ['open_time', 'open', 'high', 'low', 'close']
 
-    # Step 2: Calculate Ichimoku Cloud components
-    ichimoku_cloud, _ = ta.ichimoku(high=df['high'], low=df['low'], close=df['close'],
-                                    tenkan=tenkan_sen_length, kijun=kijun_sen_length, senkou=senkou_span_length,
-                                    include_chikou=False)
+    # Generate a long and short signal at every candle
+    entries = pd.Series(True, index=df.index)
+    
+    # Generate exit signals 10 candles after each entry
+    exits = entries.shift(10).fillna(False)
+    
+    # Calculate stop loss and take profit prices
+    long_stop_loss = df['close'] * 0.98
+    long_take_profit = df['close'] * 1.05
+    short_stop_loss = df['close'] * 1.02
+    short_take_profit = df['close'] * 0.95
+    
+    # Calculate order size as 5% of the initial cash
+    order_size = 0.05
 
-    tenkan_sen = ichimoku_cloud[f'ITS_{tenkan_sen_length}']
-    kijun_sen = ichimoku_cloud[f'IKS_{kijun_sen_length}']
-    span_a = ichimoku_cloud[f'ISA_{tenkan_sen_length}']
-    span_b = ichimoku_cloud[f'ISB_{kijun_sen_length}']
-
-    # Step 3: Calculate EMA and SMA
-    ema = ta.ema(df['close'], length=50)
-    sma = ta.sma(df['close'], length=100)
-
-    # Calculate ATR for stop loss, take profit, and trailing stop
-    atr = ta.atr(df['high'], df['low'], df['close'], length=14)
-
-    long_entries = (crossed_over(tenkan_sen, kijun_sen) & 
-                    (df['close'] > span_a) & 
-                    (df['close'] > span_b) &
-                    (df['close'] > ema) & 
-                    (df['close'] > sma))
-
-    # Step 5: Backtest the Strategy with vectorbt
-    stop_loss = atr * 2  # Example: Stop loss at 2 times the ATR value
-    take_profit = atr * 4  # Example: Take profit at 4 times the ATR value
-    trailing_stop = atr * 1.5  # Example: Trailing stop at 1.5 times the ATR value
-
-    long_exits = crossed_below(tenkan_sen, kijun_sen)
-
-    print(f'Params: {tenkan_sen_length}, {kijun_sen_length}, {senkou_span_length}')
-    portfolio = vbt.Portfolio.from_signals(
+    # Create the portfolio
+    portfolio = vbt.Portfolio.from_orders(
         close=df['close'],
-        high=df['high'],
-        low=df['low'],
-        entries=long_entries,
-        exits=long_exits,
-        freq='15min',
+        size=np.where(entries, order_size, -order_size),  # Long and short position sizes
+        price=df['close'],  # Entry price
         fees=0.001,
-        sl_stop=stop_loss,  # Stop loss
-        tp_stop=take_profit,  # Take profit
-        sl_trail=trailing_stop,  # Trailing stop
-        use_stops=True,
         init_cash=10000,
-        size=1
-    )
+        freq='15min'
+        )
 
     stats = portfolio.stats()
     portfolio.plot().show()
 
     return stats
-
-def crossed_over(series1, series2):
-    return (series1.shift(1) < series2.shift(1)) & (series1 > series2)
-
-def crossed_below(series1, series2):
-    return (series1.shift(1) > series2.shift(1)) & (series1 < series2)
-
-
 
 def optimize_strategy_worker(params):
     data, tenkan_sen_length, kijun_sen_length, senkou_span_length = params
@@ -244,7 +216,8 @@ if __name__ == "__main__":
     paths = [os.path.join(path, file) for file in os.listdir(path) if file.endswith('.parquet')]
     data = concat_parquet_files(paths)
     print("Backtesting...")
-    stats = backtest_strategy(data, tenkan_sen_length=9, kijun_sen_length=26, senkou_span_length=52)
+    stats = backtest_strategy(data.tail(10000), tenkan_sen_length=9, kijun_sen_length=26, senkou_span_length=52)
     print(stats)
+    
 
 # .head(100000).tail(50000)

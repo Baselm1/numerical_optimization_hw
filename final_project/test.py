@@ -91,9 +91,9 @@ def optimize_strategy_worker(params):
 
 def optimize_strategy(data):
     parameter_grid = {
-        'tenkan_sen_length': range(5, 51, 3),    # Adjust range and step size as needed
-        'kijun_sen_length': range(15, 46, 3),
-        'senkou_span_length': range(25, 56, 3)
+        'tenkan_sen_length': range(5, 51, 2),    # Adjust range and step size as needed
+        'kijun_sen_length': range(15, 46, 2),
+        'senkou_span_length': range(25, 56, 2)
     }
 
     results = {}
@@ -165,7 +165,7 @@ def plot_surface_with_contours(results, metric='Sharpe Ratio'):
         if metric == 'Sharpe Ratio':
             metric_value = stats['Sharpe Ratio']
         elif metric == 'Total Return':
-            metric_value = stats.get('Win Rate [%]')  # Use get() to handle missing keys gracefully
+            metric_value = stats.get('Total Return [%]')  # Use get() to handle missing keys gracefully
         else:
             metric_value = None  # Handle additional metrics if needed
         metric_values.append(metric_value)
@@ -235,15 +235,15 @@ def concat_parquet_files(file_paths):
 
 if __name__ == "__main__":
     print("Reading data...")
-    paths = [os.path.join('data/ETHUSDT', file) for file in os.listdir('data/ETHUSDT') if file.endswith('.parquet')]
+    paths = [os.path.join('data/DOGEUSDT', file) for file in os.listdir('data/DOGEUSDT') if file.endswith('.parquet')]
     data = concat_parquet_files(paths)
 
     print('Optimizing strategy...')
     start = time.time()
-    results = optimize_strategy(data.tail(int(len(data)/20)))
+    results = optimize_strategy((data.head(100000)).tail(int(len(data)/15)))
     print('Done optimization')
 
-    best_params, best_stats = max(results.items(), key=lambda x: x[1]['Win Rate [%]'])
+    best_params, best_stats = max(results.items(), key=lambda x: x[1]['Total Return [%]'])
 
     print('\n')
     print("---------------------")
